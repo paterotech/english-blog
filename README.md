@@ -157,13 +157,27 @@ Los comentarios se publican con **aprobación manual**: cualquiera puede enviarl
 
 ## Despliegue
 
-El repositorio ya incluye un `vercel.json` en `client/` (redirige todas las rutas a `index.html` para que funcione React Router) y otro en `server/` (expone `server.js` como función serverless).
+El proyecto se despliega como **dos proyectos de Vercel** apuntando al mismo repositorio, cada uno con su *Root Directory*.
 
-- **Cliente:** importar la carpeta `client` como proyecto en Vercel. Definir `VITE_BASE_URL` con la URL pública de la API.
-- **Servidor:** importar la carpeta `server` como proyecto en Vercel, o desplegarlo en Render/Railway como servicio Node con `npm start`. Declarar todas las variables de `server/.env` en el panel del servicio.
-- **MongoDB Atlas:** habilitar el acceso de red desde la plataforma de despliegue (o permitir `0.0.0.0/0` mientras se prueba).
+### Cliente (`client/`)
 
-Nunca subas los `.env` reales: las variables se configuran en el panel de cada plataforma.
+- Root Directory: `client` · Framework: Vite · Build: `npm run build` · Output: `dist`
+- Variable: `VITE_BASE_URL` con la URL pública de la API (sin `/` final). Se incrusta en el build, así que hay que **redesplegar** si cambia.
+- `vercel.json` redirige todas las rutas a `index.html` para que funcione React Router.
+
+### API (`server/`)
+
+- Root Directory: `server` · Framework: Other
+- `vercel.json` redirige todas las peticiones a la función `api/index.js`, que exporta la app de Express.
+- `server.js` solo abre el puerto cuando no está en Vercel (`process.env.VERCEL`), y la conexión a Mongo se reutiliza entre invocaciones.
+- Variables: todas las de `server/.env`, declaradas en **Settings → Environment Variables**. `PORT` no se define.
+- Alternativa: Render/Railway como servicio Node con `npm start` (proceso permanente, sin límite de tamaño por petición).
+
+### Consideraciones
+
+- **Vercel limita a 4.5 MB el cuerpo de cada petición.** Un blog con mucho HTML o una imagen grande puede fallar con `413`; en ese caso conviene la API en Render.
+- **MongoDB Atlas:** habilitar `0.0.0.0/0` en Network Access, porque las IPs de Vercel son dinámicas.
+- Nunca subas los `.env` reales: las variables se configuran en el panel de cada plataforma.
 
 ## Autor
 

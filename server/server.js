@@ -33,8 +33,11 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, ()=> {
-    console.log(`Server is running on port ${PORT}`);
-})
+// En Vercel la app corre como función: abrir un puerto dejaría la invocación colgada.
+if (!process.env.VERCEL) {
+    app.listen(PORT, ()=> {
+        console.log(`Server is running on port ${PORT}`);
+    })
+}
 
 export default app;
