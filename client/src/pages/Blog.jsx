@@ -90,7 +90,7 @@ const Blog = () => {
         <p className="text-primary py-4 font-medium">Publicado: {Moment(data.createdAt).format('Do MMMM YYYY')}</p>
         <h1 className="text-2xl sm:text-5xl font-semibold max-w-2xl mx-auto text-gray-600">{data.title}</h1>
         <h2 className="my-5 max-w-lg truncate mx-auto">{data.subTitle}</h2>
-        <p className="inline-block py-1 px-4 rounded-full mb-6 border text-sm border-primary/50 bg-primary/10 font-medium text-primary">Micaela</p>
+        <p className="inline-block py-1 px-4 rounded-full mb-6 border text-sm border-primary/50 bg-primary/10 font-medium text-primary">JRPV</p>
       </div>
       <div className="mx-5 max-w-3xl md:mx-auto my-10 mt-6">
         <img src={data.image} alt={data.title} className="w-full max-h-[520px] object-contain rounded-2xl mb-8"/>
