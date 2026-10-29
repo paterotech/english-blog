@@ -95,6 +95,30 @@ const Blog = () => {
       <div className="mx-5 max-w-3xl md:mx-auto my-10 mt-6">
         <img src={data.image} alt={data.title} className="w-full max-h-[520px] object-contain rounded-2xl mb-8"/>
         <div className="rich-text max-w-3xl mx-auto" dangerouslySetInnerHTML={{__html: data.description}}></div>
+        {data.attachments?.length > 0 && (
+          <div className="max-w-3xl mx-auto mt-10">
+            <h3 className="text-lg font-semibold text-gray-700 mb-3">Attachments</h3>
+            <ul className="space-y-2">
+              {data.attachments.map((file) => (
+                <li key={file.url}>
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-lg px-4 py-3 text-sm shadow-sm hover:border-primary transition-colors"
+                  >
+                    <span className="truncate text-primary">{file.name}</span>
+                    <span className="shrink-0 text-gray-400">
+                      {file.size >= 1024 * 1024
+                        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+                        : `${Math.max(1, Math.round(file.size / 1024))} KB`}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
       <Comments blogId={data._id} />
       <Footer/>

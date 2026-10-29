@@ -6,6 +6,12 @@ import Comment from "../models/Comment.js";
 import main from "../configs/gemini.js";
 
 const UPLOAD_FOLDER = "/blogs";
+const ATTACHMENTS_FOLDER = "/blogs/attachments";
+const MAX_ATTACHMENTS = 10;
+const ALLOWED_ATTACHMENT_EXTENSIONS = [
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+    "png", "jpg", "jpeg", "gif", "webp", "txt", "csv", "zip",
+];
 
 const removeTempFile = (file) => {
     if (file?.path) fs.unlink(file.path, () => {});
@@ -54,9 +60,69 @@ const deleteImage = async ({ image, imageFileId }) => {
     }
 };
 
+const uploadAttachmentFile = async (attachmentFile) => {
+    try {
+        const fileBuffer = fs.readFileSync(attachmentFile.path);
+        const response = await imagekit.upload({
+            file: fileBuffer,
+            fileName: attachmentFile.originalname,
+            folder: ATTACHMENTS_FOLDER,
+        });
+
+        return {
+            name: attachmentFile.originalname,
+            url: imagekit.url({ path: response.filePath }),
+            fileId: response.fileId,
+            size: attachmentFile.size,
+        };
+    } finally {
+        removeTempFile(attachmentFile);
+    }
+};
+
+const sanitizeAttachments = (attachments) => {
+    if (!Array.isArray(attachments)) return [];
+    return attachments
+        .filter((item) => item && typeof item.url === "string" && item.url.startsWith("https://"))
+        .slice(0, MAX_ATTACHMENTS)
+        .map((item) => ({
+            name: String(item.name || "attachment").slice(0, 200),
+            url: item.url,
+            fileId: String(item.fileId || ""),
+            size: Number(item.size) || 0,
+        }));
+};
+
+export const uploadBlogAttachment = async (req, res) => {
+    try {
+        const attachmentFile = req.file;
+        if (!attachmentFile) {
+            return res.status(400).json({ success: false, message: "No file provided" });
+        }
+
+        const extension = attachmentFile.originalname.split(".").pop().toLowerCase();
+        if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(extension)) {
+            removeTempFile(attachmentFile);
+            return res.status(400).json({
+                success: false,
+                message: `File type not allowed. Use: ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")}`,
+            });
+        }
+
+        const attachment = await uploadAttachmentFile(attachmentFile);
+        res.json({ success: true, attachment });
+    } catch (error) {
+        removeTempFile(req.file);
+        console.log("Error detallado:", error);
+        return res
+            .status(500)
+            .json({ success: false, message: "Internal server error" });
+    }
+};
+
 export const addBlog = async (req, res) => {
     try {
-        const { title, subTitle, description, category, isPublished } = JSON.parse(
+        const { title, subTitle, description, category, isPublished, attachments } = JSON.parse(
             req.body.blog,
         );
         const imageFile = req.file;
@@ -77,6 +143,7 @@ export const addBlog = async (req, res) => {
             category,
             image: url,
             imageFileId: fileId,
+            attachments: sanitizeAttachments(attachments),
             isPublished,
         });
         res.json({ success: true, message: "Blog added successfully" });
@@ -93,7 +160,7 @@ export const addBlog = async (req, res) => {
 export const updateBlog = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, subTitle, description, category, isPublished } = JSON.parse(
+        const { title, subTitle, description, category, isPublished, attachments } = JSON.parse(
             req.body.blog,
         );
 
@@ -115,6 +182,15 @@ export const updateBlog = async (req, res) => {
         blog.description = description;
         blog.category = category;
         blog.isPublished = Boolean(isPublished);
+
+        const nextAttachments = sanitizeAttachments(attachments);
+        const removedAttachments = (blog.attachments || []).filter(
+            (previous) =>
+                previous.fileId &&
+                !nextAttachments.some((next) => next.fileId === previous.fileId),
+        );
+        blog.attachments = nextAttachments;
+
         if (req.file) {
             const { url, fileId } = await uploadImage(req.file);
             const previousImage = { image: blog.image, imageFileId: blog.imageFileId };
@@ -124,6 +200,10 @@ export const updateBlog = async (req, res) => {
             await deleteImage(previousImage);
         } else {
             await blog.save();
+        }
+
+        for (const attachment of removedAttachments) {
+            await deleteImage({ image: attachment.url, imageFileId: attachment.fileId });
         }
 
         res.json({ success: true, message: "Blog updated successfully" });
@@ -201,6 +281,9 @@ export const deleteBlogById = async (req, res)=> {
         }
         await Comment.deleteMany({ blogId: id });
         await deleteImage(blog);
+        for (const attachment of blog.attachments || []) {
+            await deleteImage({ image: attachment.url, imageFileId: attachment.fileId });
+        }
         res.json({ success: true, message: "Blog deleted successfully" });
 
     } catch (error) {

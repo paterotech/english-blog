@@ -7,6 +7,17 @@ import toast from "react-hot-toast";
 import {parse} from 'marked';
 
 
+const MAX_ATTACHMENT_SIZE = 4 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_EXTENSIONS = [
+  "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+  "png", "jpg", "jpeg", "gif", "webp", "txt", "csv", "zip",
+];
+
+const formatSize = (bytes) =>
+  bytes >= 1024 * 1024
+    ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
 const AddBlog = () => {
 
   const {axios, fetchBlogs} = useAppContext();
@@ -19,6 +30,7 @@ const AddBlog = () => {
   const editorRef = useRef(null);
   const quillRef = useRef(null);
   const pendingDescription = useRef("");
+  const attachmentInputRef = useRef(null);
 
   const [image, setImage] = useState(false);
   const [existingImage, setExistingImage] = useState("");
@@ -26,6 +38,8 @@ const AddBlog = () => {
   const [subTitle, setSubTitle] = useState("");
   const [category, setCategory] = useState("Project Activity 1");
   const [isPublished, setIsPublished] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const generateContent = async () => {
     if(!title) return toast.error('Please, enter the title')
@@ -46,13 +60,50 @@ const AddBlog = () => {
 
   //addEventListener
 
+  const handleAttachFile = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const extension = file.name.split(".").pop().toLowerCase();
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.includes(extension)) {
+      return toast.error(`File type not allowed. Use: ${ALLOWED_ATTACHMENT_EXTENSIONS.join(", ")}`);
+    }
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      return toast.error("File is too large. Maximum size is 4 MB.");
+    }
+    if (attachments.length >= 10) {
+      return toast.error("Maximum 10 attachments per blog.");
+    }
+
+    try {
+      setUploadingAttachment(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      const {data} = await axios.post('/api/blog/upload-attachment', formData);
+      if (data.success) {
+        setAttachments((prev) => [...prev, data.attachment]);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Something went wrong');
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const removeAttachment = (url) => {
+    setAttachments((prev) => prev.filter((item) => item.url !== url));
+  };
+
   const onSubmitHandler = async (e) => {
     try {
       e.preventDefault();
       setIsAdding(true);
 
       const blog = {
-        title, subTitle, description: quillRef.current.root.innerHTML, category, isPublished
+        title, subTitle, description: quillRef.current.root.innerHTML, category, isPublished, attachments
       }
 
       const formData = new FormData();
@@ -73,6 +124,7 @@ const AddBlog = () => {
           setTitle('');
           setSubTitle('');
           setIsPublished(false);
+          setAttachments([]);
           quillRef.current.root.innerHTML = ''
           setCategory('Project Activity 1')
         }
@@ -109,6 +161,7 @@ const AddBlog = () => {
           setCategory(blog.category || 'Project Activity 1');
           setIsPublished(Boolean(blog.isPublished));
           setExistingImage(blog.image || '');
+          setAttachments(Array.isArray(blog.attachments) ? blog.attachments : []);
           pendingDescription.current = blog.description || '';
           if (quillRef.current) {
             quillRef.current.root.innerHTML = pendingDescription.current;
@@ -178,6 +231,54 @@ const AddBlog = () => {
           >
            {loading ? "Generating..." : "Generate with AI"}
           </button>
+        </div>
+        <p className=" mt-4">Blog Attachments <span className="text-gray-400 text-sm">(optional, max 4 MB each)</span></p>
+        <div className="max-w-lg mt-2">
+          <input
+            ref={attachmentInputRef}
+            type="file"
+            hidden
+            onChange={handleAttachFile}
+            accept={ALLOWED_ATTACHMENT_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
+          />
+          <button
+            type="button"
+            disabled={uploadingAttachment}
+            onClick={() => attachmentInputRef.current?.click()}
+            className="px-4 py-2 border border-dashed border-gray-300 rounded text-sm text-gray-500 hover:border-primary hover:text-primary transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {uploadingAttachment ? "Uploading..." : "+ Attach file"}
+          </button>
+          {attachments.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {attachments.map((file) => (
+                <li
+                  key={file.url}
+                  className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm"
+                >
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate text-primary hover:underline"
+                  >
+                    {file.name}
+                  </a>
+                  <span className="flex items-center gap-3 shrink-0 text-gray-400">
+                    {formatSize(file.size)}
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(file.url)}
+                      className="text-gray-400 hover:text-red-500 cursor-pointer"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <p className=" mt-4">Blog Category</p>
         <select
